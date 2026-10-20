@@ -22,7 +22,7 @@ public struct ExpandiApp: App {
     }
     
     public var body: some Scene {
-        WindowGroup("Expandi", id: "main") {
+        Window("Expandi", id: "main") {
             MainWindowView()
                 .frame(minWidth: 850, minHeight: 520)
                 .preferredColorScheme(swiftUIColorScheme)

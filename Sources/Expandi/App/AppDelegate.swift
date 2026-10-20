@@ -72,6 +72,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public private(set) var isTerminating = false
     private var isInitialLaunch = true
+    private var isAppFullyLaunched = false
     private var dockUpdateWorkItem: DispatchWorkItem?
     public weak var mainWindow: NSWindow?
     private var mainWindowDelegate: MainWindowDelegate?
@@ -165,11 +166,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
                 }
             }
         }
+        // Enable user-initiated reopen events only after the initial startup sequence completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.isAppFullyLaunched = true
+        }
     }
     
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        openMainWindow()
-        return true
+        guard isAppFullyLaunched else {
+            return false
+        }
+        if !flag {
+            openMainWindow()
+        }
+        return false
     }
     
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
