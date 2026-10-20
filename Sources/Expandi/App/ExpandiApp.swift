@@ -1,0 +1,82 @@
+import SwiftUI
+
+@main
+public struct ExpandiApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var store = SnippetStore.shared
+    @StateObject private var appState = AppState.shared
+    
+    public init() {
+        if CommandLine.arguments.contains("--test") {
+            TestRunner.runAllTests()
+            exit(0)
+        }
+    }
+    
+    public var body: some Scene {
+        WindowGroup("Expandi", id: "main") {
+            MainWindowView()
+                .frame(minWidth: 850, minHeight: 520)
+                .environmentObject(store)
+                .environmentObject(appState)
+        }
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Snippet") {
+                    let currentGroupId: UUID
+                    if case .group(let gid) = appState.selectedSidebarItem {
+                        currentGroupId = gid
+                    } else {
+                        currentGroupId = store.groups.first?.id ?? UUID()
+                    }
+                    let prefix = store.group(for: currentGroupId)?.prefix ?? ";"
+                    let newSnippet = Snippet(
+                        title: "New Snippet",
+                        abbreviation: "\(prefix)abbr\(Int.random(in: 10...99))",
+                        content: "",
+                        groupId: currentGroupId
+                    )
+                    store.addSnippet(newSnippet)
+                    appState.selectedSnippetId = newSnippet.id
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                
+                Button("Quick Search Snippets...") {
+                    appDelegate.toggleQuickSearchHUD()
+                }
+                .keyboardShortcut(" ", modifiers: .option)
+            }
+            
+            CommandGroup(replacing: .appInfo) {
+                Button("About Expandi") {
+                    NSApp.orderFrontStandardAboutPanel(
+                        options: [
+                            NSApplication.AboutPanelOptionKey.applicationName: "Expandi",
+                            NSApplication.AboutPanelOptionKey.version: "1.0.0",
+                            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "Copyright © 2026 Expandi Labs. All rights reserved."
+                        ]
+                    )
+                }
+                
+                Divider()
+                
+                Button("Typing Analytics...") {
+                    appState.activeSheet = .stats
+                }
+                
+                Button("Preferences...") {
+                    appState.activeSheet = .settings
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+            
+            CommandGroup(after: .importExport) {
+                Button("Import & Export...") {
+                    appState.activeSheet = .importExport
+                }
+            }
+        }
+    }
+}

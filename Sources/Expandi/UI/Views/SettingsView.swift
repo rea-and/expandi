@@ -1,0 +1,373 @@
+import SwiftUI
+import AppKit
+
+public struct SettingsView: View {
+    @ObservedObject var store = SnippetStore.shared
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedTab: SettingsTab = .general
+    @State private var isAccessibilityGranted: Bool = KeyboardMonitor.shared.isAccessibilityGranted
+    @State private var newExcludedApp: String = ""
+    
+    enum SettingsTab: String, CaseIterable, Identifiable {
+        case general = "General"
+        case expansion = "Expansion"
+        case hotkeys = "Hotkeys"
+        case excludedApps = "Excluded Apps"
+        case permissions = "Permissions"
+        case advanced = "Advanced"
+        
+        var id: String { rawValue }
+    }
+    
+    private let availableSounds = [
+        "Tink", "Pop", "Blow", "Bottle", "Frog", "Funk",
+        "Glass", "Hero", "Morse", "Ping", "Purr", "Sosumi", "Submarine"
+    ]
+    
+    public init() {}
+    
+    public var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Expandi Preferences")
+                    .font(.headline)
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            .background(.bar)
+            
+            Divider()
+            
+            // Tab Picker
+            Picker("", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(14)
+            
+            // Tab Contents
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    switch selectedTab {
+                    case .general:
+                        generalSection
+                    case .expansion:
+                        expansionSection
+                    case .hotkeys:
+                        hotkeysSection
+                    case .excludedApps:
+                        excludedAppsSection
+                    case .permissions:
+                        permissionsSection
+                    case .advanced:
+                        advancedSection
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            
+            Spacer()
+        }
+        .frame(width: 520, height: 420)
+        .onAppear {
+            isAccessibilityGranted = KeyboardMonitor.shared.checkAccessibilityPermissions()
+        }
+    }
+    
+    // MARK: - General
+    
+    @ViewBuilder
+    private var generalSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Toggle("Enable Text Expansion", isOn: Binding(
+                get: { store.settings.isExpansionEnabled },
+                set: {
+                    store.settings.isExpansionEnabled = $0
+                    store.saveSettings()
+                }
+            ))
+            .font(.system(size: 13, weight: .semibold))
+            
+            Divider()
+            
+            Toggle("Play Sound Effect on Expansion", isOn: Binding(
+                get: { store.settings.playSoundOnExpansion },
+                set: {
+                    store.settings.playSoundOnExpansion = $0
+                    store.saveSettings()
+                }
+            ))
+            
+            if store.settings.playSoundOnExpansion {
+                HStack(spacing: 12) {
+                    Text("Sound Effect:")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    
+                    Picker("", selection: Binding(
+                        get: { store.settings.soundName },
+                        set: {
+                            store.settings.soundName = $0
+                            store.saveSettings()
+                            SoundPlayer.shared.playExpansionSound(soundName: $0)
+                        }
+                    )) {
+                        ForEach(availableSounds, id: \.self) { sound in
+                            Text(sound).tag(sound)
+                        }
+                    }
+                    .frame(width: 140)
+                    
+                    Button("Test Sound") {
+                        SoundPlayer.shared.playExpansionSound(soundName: store.settings.soundName)
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.leading, 20)
+            }
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Expansion Keystroke Delay:")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Text("\(store.settings.expansionDelayMs) ms")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                }
+                
+                Slider(
+                    value: Binding(
+                        get: { Double(store.settings.expansionDelayMs) },
+                        set: {
+                            store.settings.expansionDelayMs = Int($0)
+                            store.saveSettings()
+                        }
+                    ),
+                    in: 5...40,
+                    step: 1
+                )
+                Text("Controls the brief delay between keystrokes when injecting text. 10ms is optimal for most modern Macs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Divider()
+            
+            Toggle("Show Icon in Menu Bar", isOn: Binding(
+                get: { store.settings.showMenuBarIcon },
+                set: {
+                    store.settings.showMenuBarIcon = $0
+                    store.saveSettings()
+                }
+            ))
+        }
+    }
+    
+    // MARK: - Expansion
+    
+    @ViewBuilder
+    private var expansionSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Default Behavior for New Snippets")
+                .font(.system(size: 13, weight: .semibold))
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Default Trigger Mode:")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Picker("", selection: Binding(
+                    get: { store.settings.defaultDelimiterMode },
+                    set: {
+                        store.settings.defaultDelimiterMode = $0
+                        store.saveSettings()
+                    }
+                )) {
+                    Text("Immediately upon typing abbreviation").tag("immediate")
+                    Text("Only after delimiter (space, comma, etc.)").tag("afterDelimiter")
+                }
+                .pickerStyle(.radioGroup)
+            }
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Default Case Sensitivity:")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Picker("", selection: Binding(
+                    get: { store.settings.defaultCaseSensitivity },
+                    set: {
+                        store.settings.defaultCaseSensitivity = $0
+                        store.saveSettings()
+                    }
+                )) {
+                    Text("Adapt to Typed Case (e.g. typing ';DATE' expands in ALL CAPS)").tag("adaptCase")
+                    Text("Exact Match Only").tag("exactMatch")
+                    Text("Ignore Case").tag("ignoreCase")
+                }
+                .pickerStyle(.radioGroup)
+            }
+        }
+    }
+    
+    // MARK: - Hotkeys
+    
+    @ViewBuilder
+    private var hotkeysSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Global Shortcuts")
+                .font(.system(size: 13, weight: .semibold))
+            
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Quick Search HUD Hotkey:")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Opens the Spotlight-style snippet search anywhere in macOS")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                Picker("", selection: Binding(
+                    get: { store.settings.quickSearchHotkey },
+                    set: {
+                        store.settings.quickSearchHotkey = $0
+                        store.saveSettings()
+                        HotkeyManager.shared.register(shortcut: $0) {
+                            Task { @MainActor in
+                                AppDelegate.shared?.toggleQuickSearchHUD()
+                            }
+                        }
+                    }
+                )) {
+                    Text("⌥ Space (Option + Space)").tag("Option+Space")
+                    Text("⇧⌘E (Cmd + Shift + E)").tag("Cmd+Shift+E")
+                    Text("⇧⌘K (Cmd + Shift + K)").tag("Cmd+Shift+K")
+                    Text("⌥⌘E (Option + Cmd + E)").tag("Option+Cmd+E")
+                }
+                .frame(width: 220)
+            }
+        }
+    }
+    
+    // MARK: - Excluded Apps
+    
+    @ViewBuilder
+    private var excludedAppsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Exclude Applications")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Expandi will never monitor or expand snippets when typing inside these apps (e.g. password managers or terminal):")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                TextField("e.g. com.1password.1password or Terminal", text: $newExcludedApp)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                
+                Button("Add App") {
+                    let trimmed = newExcludedApp.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty && !store.settings.excludedAppBundleIds.contains(trimmed) {
+                        store.settings.excludedAppBundleIds.append(trimmed)
+                        store.saveSettings()
+                        newExcludedApp = ""
+                    }
+                }
+                .controlSize(.small)
+            }
+            
+            VStack(spacing: 4) {
+                ForEach(store.settings.excludedAppBundleIds, id: \.self) { bundleId in
+                    HStack {
+                        Image(systemName: "app.badge.xmark")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11))
+                        Text(bundleId)
+                            .font(.system(size: 12, design: .monospaced))
+                        Spacer()
+                        Button {
+                            store.settings.excludedAppBundleIds.removeAll { $0 == bundleId }
+                            store.saveSettings()
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+    }
+    
+    // MARK: - Permissions
+    
+    @ViewBuilder
+    private var permissionsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: isAccessibilityGranted ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(isAccessibilityGranted ? .green : .orange)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isAccessibilityGranted ? "Accessibility Permission Granted" : "Accessibility Permission Required")
+                        .font(.headline)
+                    Text(isAccessibilityGranted ? "Expandi is fully authorized to monitor keystrokes and expand snippets system-wide." : "macOS requires Accessibility access so Expandi can detect abbreviations and insert expanded text.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .background((isAccessibilityGranted ? Color.green : Color.orange).opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            
+            Button("Open macOS Accessibility Settings...") {
+                KeyboardMonitor.shared.openSystemSettingsAccessibility()
+            }
+            .buttonStyle(.borderedProminent)
+            
+            Button("Re-check Permission Status") {
+                isAccessibilityGranted = KeyboardMonitor.shared.checkAccessibilityPermissions()
+            }
+            .controlSize(.small)
+        }
+    }
+    
+    // MARK: - Advanced
+    
+    @ViewBuilder
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Reset & Backup Options")
+                .font(.system(size: 13, weight: .semibold))
+            
+            Button(role: .destructive) {
+                store.resetToDefaults()
+            } label: {
+                Text("Reset All to Default Starter Snippets")
+            }
+            .buttonStyle(.bordered)
+            
+            Text("Replaces all current snippets and groups with the original pre-loaded starter pack.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
