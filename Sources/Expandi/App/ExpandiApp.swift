@@ -6,6 +6,14 @@ public struct ExpandiApp: App {
     @StateObject private var store = SnippetStore.shared
     @StateObject private var appState = AppState.shared
     
+    private var swiftUIColorScheme: ColorScheme? {
+        switch store.settings.colorScheme {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+    
     public init() {
         if CommandLine.arguments.contains("--test") {
             TestRunner.runAllTests()
@@ -17,6 +25,7 @@ public struct ExpandiApp: App {
         WindowGroup("Expandi", id: "main") {
             MainWindowView()
                 .frame(minWidth: 850, minHeight: 520)
+                .preferredColorScheme(swiftUIColorScheme)
                 .environmentObject(store)
                 .environmentObject(appState)
         }

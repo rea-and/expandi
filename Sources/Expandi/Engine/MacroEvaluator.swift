@@ -56,14 +56,13 @@ public final class MacroEvaluator: Sendable {
                 }
                 
             case "datepicker":
-                // Format: {{datepicker:Label:format=yyyy-MM-dd}}
                 let parts = rawParams.components(separatedBy: ":")
                 let label = parts[0].trimmingCharacters(in: .whitespaces)
                 var format = "yyyy-MM-dd"
                 for part in parts.dropFirst() {
                     let trimmed = part.trimmingCharacters(in: .whitespaces)
                     if trimmed.starts(with: "format=") {
-                        format = String(trimmed.dropFirst("format=".count))
+                        format = Self.normalizeDateFormat(String(trimmed.dropFirst("format=".count)))
                     }
                 }
                 let id = "date_\(label)"
@@ -76,7 +75,6 @@ public final class MacroEvaluator: Sendable {
                 }
                 
             case "choice":
-                // Format: {{choice:Label:Option1,Option2,Option3:default=Option2}}
                 let parts = rawParams.components(separatedBy: ":")
                 let label = parts[0].trimmingCharacters(in: .whitespaces)
                 var options: [String] = []
@@ -103,7 +101,6 @@ public final class MacroEvaluator: Sendable {
                 }
                 
             case "opt":
-                // Format: {{opt:Label:Content}} or {{opt:Content}}
                 let parts = rawParams.components(separatedBy: ":")
                 let label: String
                 let contentText: String
@@ -144,7 +141,6 @@ public final class MacroEvaluator: Sendable {
     
     // MARK: - Evaluation
     
-    /// Evaluates all dynamic macros in a snippet and produces the final expansion text
     public func evaluate(
         snippet: Snippet,
         fillInValues: [String: String] = [:],
@@ -152,12 +148,10 @@ public final class MacroEvaluator: Sendable {
         typedTrigger: String? = nil,
         depth: Int = 0
     ) -> MacroEvaluationResult {
-        // Prevent infinite nested snippet loops
         guard depth < 6 else {
             return MacroEvaluationResult(text: "[Recursion Limit]")
         }
         
-        // Handle Script Snippet Types
         if snippet.type == .shellScript {
             let output = executeShellCommand(snippet.content)
             return MacroEvaluationResult(text: output)
@@ -242,7 +236,7 @@ public final class MacroEvaluator: Sendable {
                     for part in parts.dropFirst() {
                         let trimmed = part.trimmingCharacters(in: .whitespaces)
                         if trimmed.starts(with: "format=") {
-                            format = String(trimmed.dropFirst("format=".count))
+                            format = Self.normalizeDateFormat(String(trimmed.dropFirst("format=".count)))
                         }
                     }
                     if let userVal = fillInValues["date_\(label)"] {
@@ -326,6 +320,14 @@ public final class MacroEvaluator: Sendable {
         let now = Date()
         let calendar = Calendar.current
         
+        // Unix Timestamp: {{timestamp}} or {{time:unix}}
+        if result.contains("{{timestamp}}") {
+            result = result.replacingOccurrences(of: "{{timestamp}}", with: String(Int(now.timeIntervalSince1970)))
+        }
+        if result.contains("{{time:unix}}") {
+            result = result.replacingOccurrences(of: "{{time:unix}}", with: String(Int(now.timeIntervalSince1970)))
+        }
+        
         // Simple {{datetime}}
         if result.contains("{{datetime}}") {
             let formatter = DateFormatter()
@@ -334,9 +336,9 @@ public final class MacroEvaluator: Sendable {
             result = result.replacingOccurrences(of: "{{datetime}}", with: formatter.string(from: now))
         }
         
-        // Date math offsets: {{date+7d}}, {{date-3d}}, {{date+1m}}, {{date+1y}}, {{date+2w}}
-        let offsetSimplePattern = #"\{\{date([\+\-]\d+[dmyw])\}\}"#
-        if let regex = try? NSRegularExpression(pattern: offsetSimplePattern, options: []) {
+        // Date math offsets: {{date+7d}}, {{date-3d}}, {{date+1m}}, {{date+1y}}, {{date+2w}}, {{date+1bd}}
+        let offsetSimplePattern = #"\{\{date([\+\-]\d+[a-z]+)\}\}"#
+        if let regex = try? NSRegularExpression(pattern: offsetSimplePattern, options: [.caseInsensitive]) {
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: (result as NSString).length))
             for match in matches.reversed() {
                 let offsetStr = (result as NSString).substring(with: match.range(at: 1))
@@ -364,17 +366,17 @@ public final class MacroEvaluator: Sendable {
                         for pair in pairs {
                             let kv = pair.components(separatedBy: "=")
                             if kv.count == 2 {
-                                let key = kv[0].trimmingCharacters(in: .whitespaces)
+                                let key = kv[0].trimmingCharacters(in: .whitespaces).lowercased()
                                 let val = kv[1].trimmingCharacters(in: .whitespaces)
                                 if key == "offset" {
                                     targetDate = applyDateOffset(val, to: now, calendar: calendar)
                                 } else if key == "format" {
-                                    format = val
+                                    format = Self.normalizeDateFormat(val)
                                 }
                             }
                         }
                     } else {
-                        format = params
+                        format = Self.normalizeDateFormat(params)
                     }
                 }
                 
@@ -391,15 +393,31 @@ public final class MacroEvaluator: Sendable {
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: (result as NSString).length))
             for match in matches.reversed() {
                 var format = "h:mm a"
+                var targetDate = now
+                
                 if match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound {
-                    let custom = (result as NSString).substring(with: match.range(at: 1))
-                    if !custom.isEmpty {
-                        format = custom
+                    let params = (result as NSString).substring(with: match.range(at: 1))
+                    if params.contains("=") {
+                        let pairs = params.components(separatedBy: ",")
+                        for pair in pairs {
+                            let kv = pair.components(separatedBy: "=")
+                            if kv.count == 2 {
+                                let key = kv[0].trimmingCharacters(in: .whitespaces).lowercased()
+                                let val = kv[1].trimmingCharacters(in: .whitespaces)
+                                if key == "offset" {
+                                    targetDate = applyDateOffset(val, to: now, calendar: calendar)
+                                } else if key == "format" {
+                                    format = val
+                                }
+                            }
+                        }
+                    } else if !params.isEmpty {
+                        format = params
                     }
                 }
                 let formatter = DateFormatter()
                 formatter.dateFormat = format
-                let formatted = formatter.string(from: now)
+                let formatted = formatter.string(from: targetDate)
                 result = (result as NSString).replacingCharacters(in: match.range, with: formatted)
             }
         }
@@ -434,14 +452,46 @@ public final class MacroEvaluator: Sendable {
         return result
     }
     
+    public static func normalizeDateFormat(_ format: String) -> String {
+        var norm = format
+        norm = norm.replacingOccurrences(of: "YYYY", with: "yyyy")
+        norm = norm.replacingOccurrences(of: "DD", with: "dd")
+        return norm
+    }
+    
     private func applyDateOffset(_ offsetStr: String, to baseDate: Date, calendar: Calendar) -> Date {
-        let trimmed = offsetStr.trimmingCharacters(in: .whitespaces)
+        let trimmed = offsetStr.trimmingCharacters(in: .whitespaces).lowercased()
         guard trimmed.count >= 2 else { return baseDate }
         
         let sign = trimmed.starts(with: "-") ? -1 : 1
         let cleaned = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "+-"))
-        guard let unitChar = cleaned.last, let amount = Int(cleaned.dropLast()) else { return baseDate }
         
+        // Business days: e.g. "1bd", "5bd"
+        if cleaned.hasSuffix("bd") {
+            let amountStr = cleaned.dropLast(2)
+            if let amount = Int(amountStr) {
+                var current = baseDate
+                var daysRemaining = abs(amount)
+                let step = sign
+                while daysRemaining > 0 {
+                    current = calendar.date(byAdding: .day, value: step, to: current) ?? current
+                    let weekday = calendar.component(.weekday, from: current) // 1 = Sun, 7 = Sat
+                    if weekday != 1 && weekday != 7 {
+                        daysRemaining -= 1
+                    }
+                }
+                return current
+            }
+        }
+        
+        // Minutes
+        if cleaned.hasSuffix("min") {
+            if let amount = Int(cleaned.dropLast(3)) {
+                return calendar.date(byAdding: .minute, value: sign * amount, to: baseDate) ?? baseDate
+            }
+        }
+        
+        guard let unitChar = cleaned.last, let amount = Int(cleaned.dropLast()) else { return baseDate }
         let value = sign * amount
         switch unitChar {
         case "d":
@@ -452,6 +502,8 @@ public final class MacroEvaluator: Sendable {
             return calendar.date(byAdding: .month, value: value, to: baseDate) ?? baseDate
         case "y":
             return calendar.date(byAdding: .year, value: value, to: baseDate) ?? baseDate
+        case "h":
+            return calendar.date(byAdding: .hour, value: value, to: baseDate) ?? baseDate
         default:
             return baseDate
         }

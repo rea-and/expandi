@@ -40,6 +40,29 @@ public struct MainWindowView: View {
             }
             
             ToolbarItem(placement: .automatic) {
+                Menu {
+                    Button("System Appearance") {
+                        store.settings.colorScheme = .system
+                        store.saveSettings()
+                        AppDelegate.shared?.applyAppearance()
+                    }
+                    Button("Light Mode") {
+                        store.settings.colorScheme = .light
+                        store.saveSettings()
+                        AppDelegate.shared?.applyAppearance()
+                    }
+                    Button("Dark Mode") {
+                        store.settings.colorScheme = .dark
+                        store.saveSettings()
+                        AppDelegate.shared?.applyAppearance()
+                    }
+                } label: {
+                    Image(systemName: store.settings.colorScheme == .light ? "sun.max.fill" : (store.settings.colorScheme == .dark ? "moon.fill" : "circle.righthalf.filled"))
+                }
+                .help("Switch Appearance (System / Light / Dark)")
+            }
+            
+            ToolbarItem(placement: .automatic) {
                 Button {
                     AppDelegate.shared?.toggleQuickSearchHUD()
                 } label: {

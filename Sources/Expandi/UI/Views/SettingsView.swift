@@ -99,6 +99,29 @@ public struct SettingsView: View {
             
             Divider()
             
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Color Scheme / Appearance:")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                
+                Picker("", selection: Binding(
+                    get: { store.settings.colorScheme },
+                    set: { newScheme in
+                        store.settings.colorScheme = newScheme
+                        store.saveSettings()
+                        AppDelegate.shared?.applyAppearance()
+                    }
+                )) {
+                    ForEach(AppColorScheme.allCases, id: \.self) { scheme in
+                        Label(scheme.displayName, systemImage: scheme.iconName).tag(scheme)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
+            
+            Divider()
+            
             Toggle("Play Sound Effect on Expansion", isOn: Binding(
                 get: { store.settings.playSoundOnExpansion },
                 set: {

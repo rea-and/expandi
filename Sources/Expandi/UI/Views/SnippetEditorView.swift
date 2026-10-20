@@ -8,6 +8,7 @@ public struct SnippetEditorView: View {
     @State private var testInput: String = ""
     @State private var tagInput: String = ""
     @State private var activeFillInSheet: FillInInsertType? = nil
+    @State private var showingDateBuilderSheet = false
     
     enum BottomTab: String, CaseIterable, Identifiable {
         case preview = "Live Preview"
@@ -120,48 +121,97 @@ public struct SnippetEditorView: View {
                 
                 Divider()
                 
-                // Icon Macro Toolbar (Matches the exact layout from screenshot)
+                // Icon Macro Toolbar
                 HStack(spacing: 14) {
-                    // 1. Calendar (Date)
+                    // 1. Calendar (Date Menu with comprehensive formats)
                     Menu {
-                        Button("Today (YYYY-MM-DD)") { insertMacro("{{date:YYYY-MM-dd}}", into: snippet) }
-                        Button("Long Date (Month Day, Year)") { insertMacro("{{date:MMMM d, YYYY}}", into: snippet) }
-                        Button("Day of Week (e.g. Tuesday)") { insertMacro("{{date:EEEE}}", into: snippet) }
-                        Button("ISO 8601 Timestamp") { insertMacro("{{date:YYYY-MM-dd}}T{{time:HH:mm:ss}}Z", into: snippet) }
+                        Section("Common Date Formats") {
+                            Button("ISO Date (YYYY-MM-DD)") { insertMacro("{{date:yyyy-MM-dd}}", into: snippet) }
+                            Button("US Format (MM/DD/YYYY)") { insertMacro("{{date:MM/dd/yyyy}}", into: snippet) }
+                            Button("European Format (DD/MM/YYYY)") { insertMacro("{{date:dd/MM/yyyy}}", into: snippet) }
+                            Button("Long Date (Month Day, Year)") { insertMacro("{{date:MMMM d, yyyy}}", into: snippet) }
+                            Button("Medium Date (MMM D, YYYY)") { insertMacro("{{date:MMM d, yyyy}}", into: snippet) }
+                            Button("Full with Weekday (Tuesday, Oct 20)") { insertMacro("{{date:EEEE, MMMM d, yyyy}}", into: snippet) }
+                            Button("Day of Week (e.g. Tuesday)") { insertMacro("{{date:EEEE}}", into: snippet) }
+                            Button("Short Weekday (e.g. Tue)") { insertMacro("{{date:EEE}}", into: snippet) }
+                            Button("Compact Date (YYYYMMDD)") { insertMacro("{{date:yyyyMMdd}}", into: snippet) }
+                        }
+                        
+                        Section("Combined Date & Timestamps") {
+                            Button("ISO 8601 Timestamp") { insertMacro("{{date:yyyy-MM-dd}}T{{time:HH:mm:ss}}Z", into: snippet) }
+                            Button("Standard Date & Time") { insertMacro("{{date:yyyy-MM-dd}} {{time:HH:mm}}", into: snippet) }
+                            Button("Unix Epoch Seconds") { insertMacro("{{timestamp}}", into: snippet) }
+                        }
+                        
+                        Divider()
+                        
+                        Button("Custom Date Format & Math...") {
+                            showingDateBuilderSheet = true
+                        }
                     } label: {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 14))
+                        HStack(spacing: 2) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 14))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 24)
+                    .frame(width: 34)
                     .help("Insert Date Macro")
                     
-                    // 2. Clock (Time)
+                    // 2. Clock (Time Menu)
                     Menu {
                         Button("12-Hour Time (h:mm a)") { insertMacro("{{time:h:mm a}}", into: snippet) }
-                        Button("24-Hour Time (HH:mm)") { insertMacro("{{time:HH:mm}}", into: snippet) }
-                        Button("With Seconds (HH:mm:ss)") { insertMacro("{{time:HH:mm:ss}}", into: snippet) }
+                        Button("12-Hour with Seconds (h:mm:ss a)") { insertMacro("{{time:h:mm:ss a}}", into: snippet) }
+                        Button("24-Hour Military (HH:mm)") { insertMacro("{{time:HH:mm}}", into: snippet) }
+                        Button("24-Hour with Seconds (HH:mm:ss)") { insertMacro("{{time:HH:mm:ss}}", into: snippet) }
+                        Button("With Timezone (h:mm a z)") { insertMacro("{{time:h:mm a z}}", into: snippet) }
+                        Button("With Milliseconds (HH:mm:ss.SSS)") { insertMacro("{{time:HH:mm:ss.SSS}}", into: snippet) }
                     } label: {
-                        Image(systemName: "clock")
-                            .font(.system(size: 14))
+                        HStack(spacing: 2) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 14))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 24)
+                    .frame(width: 34)
                     .help("Insert Time Macro")
                     
-                    // 3. Calculator / Date Math
+                    // 3. Calculator / Date & Time Math
                     Menu {
-                        Button("+1 Day (Tomorrow)") { insertMacro("{{date:offset=+1d,format=YYYY-MM-dd}}", into: snippet) }
-                        Button("-1 Day (Yesterday)") { insertMacro("{{date:offset=-1d,format=YYYY-MM-dd}}", into: snippet) }
-                        Button("+7 Days (Next Week)") { insertMacro("{{date:offset=+7d,format=YYYY-MM-dd}}", into: snippet) }
-                        Button("+1 Month") { insertMacro("{{date:offset=+1m,format=YYYY-MM-dd}}", into: snippet) }
-                        Button("+1 Year") { insertMacro("{{date:offset=+1y,format=YYYY-MM-dd}}", into: snippet) }
+                        Section("Days & Workdays") {
+                            Button("+1 Day (Tomorrow)") { insertMacro("{{date:offset=+1d,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("-1 Day (Yesterday)") { insertMacro("{{date:offset=-1d,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("+1 Business Day (Next Workday)") { insertMacro("{{date:offset=+1bd,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("+7 Days (Next Week)") { insertMacro("{{date:offset=+7d,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("+14 Days (2 Weeks)") { insertMacro("{{date:offset=+14d,format=yyyy-MM-dd}}", into: snippet) }
+                        }
+                        
+                        Section("Months & Years") {
+                            Button("+1 Month") { insertMacro("{{date:offset=+1m,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("-1 Month") { insertMacro("{{date:offset=-1m,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("+1 Year") { insertMacro("{{date:offset=+1y,format=yyyy-MM-dd}}", into: snippet) }
+                            Button("-1 Year") { insertMacro("{{date:offset=-1y,format=yyyy-MM-dd}}", into: snippet) }
+                        }
+                        
+                        Divider()
+                        
+                        Button("Custom Date Math...") {
+                            showingDateBuilderSheet = true
+                        }
                     } label: {
-                        Image(systemName: "plus.forwardslash.minus")
-                            .font(.system(size: 14))
+                        HStack(spacing: 2) {
+                            Image(systemName: "plus.forwardslash.minus")
+                                .font(.system(size: 14))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 24)
+                    .frame(width: 34)
                     .help("Date & Time Math")
                     
                     // 4. Keyboard Key Simulation
@@ -170,11 +220,15 @@ public struct SnippetEditorView: View {
                         Button("Return / Enter Key") { insertMacro("{{key:return}}", into: snippet) }
                         Button("Escape Key") { insertMacro("{{key:esc}}", into: snippet) }
                     } label: {
-                        Image(systemName: "keyboard")
-                            .font(.system(size: 14))
+                        HStack(spacing: 2) {
+                            Image(systemName: "keyboard")
+                                .font(.system(size: 14))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                        }
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 24)
+                    .frame(width: 34)
                     .help("Insert Simulated Key Press")
                     
                     // 5. Cursor Placement Marker
@@ -187,7 +241,7 @@ public struct SnippetEditorView: View {
                     .buttonStyle(.plain)
                     .help("Set Cursor Position After Expansion ({{cursor}})")
                     
-                    // 6. Fill-In Dropdown Menu (Exact match to screenshot!)
+                    // 6. Fill-In Dropdown Menu
                     Menu {
                         Button {
                             activeFillInSheet = .singleLine
@@ -286,7 +340,7 @@ public struct SnippetEditorView: View {
                 
                 Divider()
                 
-                // Bottom Metadata & Configuration (Matches screenshot layout)
+                // Bottom Metadata & Configuration
                 VStack(spacing: 8) {
                     // Row 1: Label
                     HStack(spacing: 12) {
@@ -393,7 +447,7 @@ public struct SnippetEditorView: View {
                 
                 Divider()
                 
-                // Bottom Tabbed Area (Live Preview / Interactive Tester / Notes & Tags)
+                // Bottom Tabbed Area
                 VStack(spacing: 0) {
                     HStack {
                         Picker("", selection: $bottomTab) {
@@ -515,6 +569,11 @@ public struct SnippetEditorView: View {
                     insertMacro(macro, into: snippet)
                 }
             }
+            .sheet(isPresented: $showingDateBuilderSheet) {
+                DateFormatBuilderSheet { macro in
+                    insertMacro(macro, into: snippet)
+                }
+            }
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "text.alignleft")
@@ -532,6 +591,149 @@ public struct SnippetEditorView: View {
         var updated = snippet
         updated.content.append(macroString)
         store.updateSnippet(updated)
+    }
+}
+
+// MARK: - Date Format & Math Builder Sheet
+
+public struct DateFormatBuilderSheet: View {
+    let onInsert: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedPresetIndex = 0
+    @State private var customFormat: String = "yyyy-MM-dd"
+    @State private var offsetAmount: Int = 0
+    @State private var offsetUnit: String = "d"
+    
+    private let presets: [(title: String, format: String)] = [
+        ("ISO 8601 (YYYY-MM-DD)", "yyyy-MM-dd"),
+        ("US Format (MM/DD/YYYY)", "MM/dd/yyyy"),
+        ("European Format (DD/MM/YYYY)", "dd/MM/yyyy"),
+        ("Long Date (Month Day, Year)", "MMMM d, yyyy"),
+        ("Medium Date (MMM D, YYYY)", "MMM d, yyyy"),
+        ("Full with Weekday", "EEEE, MMMM d, yyyy"),
+        ("Day of Week (e.g. Tuesday)", "EEEE"),
+        ("Short Weekday (e.g. Tue)", "EEE"),
+        ("Compact (YYYYMMDD)", "yyyyMMdd"),
+        ("Date & Time (YYYY-MM-DD HH:mm)", "yyyy-MM-dd HH:mm"),
+        ("ISO 8601 Complete Timestamp", "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        ("12-Hour Time (h:mm a)", "h:mm a"),
+        ("24-Hour Time (HH:mm:ss)", "HH:mm:ss")
+    ]
+    
+    private var livePreview: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = MacroEvaluator.normalizeDateFormat(customFormat)
+        var targetDate = Date()
+        if offsetAmount != 0 {
+            let cal = Calendar.current
+            switch offsetUnit {
+            case "d": targetDate = cal.date(byAdding: .day, value: offsetAmount, to: targetDate) ?? targetDate
+            case "bd":
+                var current = targetDate
+                var rem = abs(offsetAmount)
+                let step = offsetAmount > 0 ? 1 : -1
+                while rem > 0 {
+                    current = cal.date(byAdding: .day, value: step, to: current) ?? current
+                    let wd = cal.component(.weekday, from: current)
+                    if wd != 1 && wd != 7 { rem -= 1 }
+                }
+                targetDate = current
+            case "w": targetDate = cal.date(byAdding: .day, value: offsetAmount * 7, to: targetDate) ?? targetDate
+            case "m": targetDate = cal.date(byAdding: .month, value: offsetAmount, to: targetDate) ?? targetDate
+            case "y": targetDate = cal.date(byAdding: .year, value: offsetAmount, to: targetDate) ?? targetDate
+            default: break
+            }
+        }
+        return formatter.string(from: targetDate)
+    }
+    
+    public var body: some View {
+        VStack(spacing: 16) {
+            Text("Date & Time Macro Builder")
+                .font(.headline)
+            
+            Form {
+                Picker("Format Preset:", selection: $selectedPresetIndex) {
+                    ForEach(0..<presets.count, id: \.self) { idx in
+                        Text(presets[idx].title).tag(idx)
+                    }
+                }
+                .onChange(of: selectedPresetIndex) { _, newIdx in
+                    customFormat = presets[newIdx].format
+                }
+                
+                TextField("Format Pattern:", text: $customFormat)
+                    .help("Common tokens: yyyy (year), MM (month), dd (day), EEEE (weekday), HH (24h), hh (12h), mm (min), ss (sec), a (AM/PM)")
+                
+                HStack(spacing: 8) {
+                    Text("Date Math Offset:")
+                    Picker("", selection: $offsetAmount) {
+                        Text("No Offset (Today)").tag(0)
+                        Text("+1").tag(1)
+                        Text("+2").tag(2)
+                        Text("+3").tag(3)
+                        Text("+7").tag(7)
+                        Text("+14").tag(14)
+                        Text("+30").tag(30)
+                        Text("-1").tag(-1)
+                        Text("-7").tag(-7)
+                    }
+                    .frame(width: 140)
+                    
+                    Picker("", selection: $offsetUnit) {
+                        Text("Calendar Days").tag("d")
+                        Text("Business Days (skips weekends)").tag("bd")
+                        Text("Weeks").tag("w")
+                        Text("Months").tag("m")
+                        Text("Years").tag("y")
+                    }
+                    .frame(width: 180)
+                }
+            }
+            .formStyle(.grouped)
+            
+            // Live Preview Card
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Result Preview:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(livePreview.isEmpty ? "(Empty)" : livePreview)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .padding(.horizontal, 20)
+            
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Spacer()
+                
+                Button("Insert Macro") {
+                    let macro: String
+                    if offsetAmount == 0 {
+                        macro = "{{date:\(customFormat)}}"
+                    } else {
+                        let sign = offsetAmount > 0 ? "+\(offsetAmount)" : "\(offsetAmount)"
+                        macro = "{{date:offset=\(sign)\(offsetUnit),format=\(customFormat)}}"
+                    }
+                    onInsert(macro)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+        }
+        .frame(width: 480, height: 350)
     }
 }
 

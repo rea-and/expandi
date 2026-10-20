@@ -18,6 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        applyAppearance()
         
         // Setup Keyboard Monitor
         KeyboardMonitor.shared.delegate = self
@@ -47,6 +48,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
             openMainWindow()
         }
         return true
+    }
+    
+    // MARK: - Appearance (Light / Dark)
+    
+    public func applyAppearance() {
+        let scheme = SnippetStore.shared.settings.colorScheme
+        switch scheme {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
     }
     
     // MARK: - Status Bar Item
