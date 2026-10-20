@@ -71,6 +71,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     public static private(set) var shared: AppDelegate?
     
     public private(set) var isTerminating = false
+    private var isInitialLaunch = true
     public weak var mainWindow: NSWindow?
     private var mainWindowDelegate: MainWindowDelegate?
     
@@ -85,7 +86,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     }
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        let settings = SnippetStore.shared.settings
+        if settings.hideFromDockWhenClosed && settings.hasCompletedOnboarding {
+            NSApp.setActivationPolicy(.accessory)
+        } else {
+            NSApp.setActivationPolicy(.regular)
+        }
         applyAppearance()
         
         // Setup Keyboard Monitor
@@ -210,6 +216,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         delegate.appDelegate = self
         self.mainWindowDelegate = delegate
         window.delegate = delegate
+        
+        if isInitialLaunch {
+            isInitialLaunch = false
+            let settings = SnippetStore.shared.settings
+            if settings.hideFromDockWhenClosed && settings.hasCompletedOnboarding {
+                window.orderOut(nil)
+                DispatchQueue.main.async {
+                    window.orderOut(nil)
+                }
+                if NSApp.activationPolicy() != .accessory {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+                return
+            }
+        }
         
         updateDockVisibility()
     }

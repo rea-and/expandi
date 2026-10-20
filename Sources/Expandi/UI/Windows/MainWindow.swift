@@ -125,11 +125,23 @@ public struct MainWindowView: View {
 
 // MARK: - Window Accessor Helper
 
+private final class WindowAccessorCustomView: NSView {
+    var onWindowFound: ((NSWindow) -> Void)?
+    
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window = window {
+            onWindowFound?(window)
+        }
+    }
+}
+
 private struct WindowAccessor: NSViewRepresentable {
     let callback: (NSWindow) -> Void
 
-    func makeNSView(context: Context) -> NSView {
-        let nsView = NSView()
+    func makeNSView(context: Context) -> WindowAccessorCustomView {
+        let nsView = WindowAccessorCustomView()
+        nsView.onWindowFound = callback
         DispatchQueue.main.async {
             if let window = nsView.window {
                 self.callback(window)
@@ -138,7 +150,8 @@ private struct WindowAccessor: NSViewRepresentable {
         return nsView
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: WindowAccessorCustomView, context: Context) {
+        nsView.onWindowFound = callback
         DispatchQueue.main.async {
             if let window = nsView.window {
                 self.callback(window)

@@ -264,7 +264,7 @@ public struct SettingsView: View {
                         AppDelegate.shared?.updateDockVisibility()
                     }
                 ))
-                Text("When closed, Expandi hides from the Dock and stays active in your menu bar. Reopen anytime from the menu bar.")
+                Text("When enabled, Expandi starts silently in the menu bar and hides from the Dock when the window is closed. Reopen anytime from the menu bar.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 20)
