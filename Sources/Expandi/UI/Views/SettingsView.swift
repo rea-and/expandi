@@ -16,11 +16,29 @@ public struct SettingsView: View {
         case general = "General"
         case expansion = "Expansion"
         case hotkeys = "Hotkeys"
-        case excludedApps = "Excluded Apps"
+        case excludedApps = "Excluded"
         case permissions = "Permissions"
         case advanced = "Advanced"
         
         var id: String { rawValue }
+        
+        var icon: String {
+            switch self {
+            case .general: return "gearshape.fill"
+            case .expansion: return "bolt.fill"
+            case .hotkeys: return "command"
+            case .excludedApps: return "app.badge.xmark"
+            case .permissions: return "hand.raised.fill"
+            case .advanced: return "slider.horizontal.3"
+            }
+        }
+        
+        var fullTitle: String {
+            switch self {
+            case .excludedApps: return "Excluded Applications"
+            default: return rawValue
+            }
+        }
     }
     
     private let availableSounds = [
@@ -42,23 +60,52 @@ public struct SettingsView: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
             .background(.bar)
             
             Divider()
             
-            // Tab Picker
-            Picker("", selection: $selectedTab) {
+            // Native Tab Bar with SF Symbols
+            HStack(spacing: 6) {
                 ForEach(SettingsTab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.secondary)
+                            
+                            Text(tab.rawValue)
+                                .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                                .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 4)
+                        .background(
+                            selectedTab == tab
+                                ? Color.accentColor.opacity(0.12)
+                                : Color.secondary.opacity(0.04)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .help(tab.fullTitle)
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(14)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.bar)
+            
+            Divider()
             
             // Tab Contents
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     switch selectedTab {
                     case .general:
                         generalSection
@@ -74,13 +121,13 @@ public struct SettingsView: View {
                         advancedSection
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
             
             Spacer()
         }
-        .frame(width: 520, height: 420)
+        .frame(width: 580, height: 480)
         .onAppear {
             isAccessibilityGranted = KeyboardMonitor.shared.checkAccessibilityPermissions()
         }
