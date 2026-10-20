@@ -7,8 +7,20 @@ public struct SnippetEditorView: View {
     @State private var bottomTab: BottomTab = .preview
     @State private var testInput: String = ""
     @State private var tagInput: String = ""
-    @State private var activeFillInSheet: FillInInsertType? = nil
-    @State private var showingDateBuilderSheet = false
+    
+    enum ActiveEditorSheet: Identifiable {
+        case fillIn(FillInInsertType)
+        case dateBuilder
+        
+        var id: String {
+            switch self {
+            case .fillIn(let t): return "fillIn_\(t.id)"
+            case .dateBuilder: return "dateBuilder"
+            }
+        }
+    }
+    
+    @State private var activeEditorSheet: ActiveEditorSheet? = nil
     
     enum BottomTab: String, CaseIterable, Identifiable {
         case preview = "Live Preview"
@@ -146,7 +158,7 @@ public struct SnippetEditorView: View {
                         Divider()
                         
                         Button("Custom Date Format & Math...") {
-                            showingDateBuilderSheet = true
+                            activeEditorSheet = .dateBuilder
                         }
                     } label: {
                         HStack(spacing: 2) {
@@ -200,7 +212,7 @@ public struct SnippetEditorView: View {
                         Divider()
                         
                         Button("Custom Date Math...") {
-                            showingDateBuilderSheet = true
+                            activeEditorSheet = .dateBuilder
                         }
                     } label: {
                         HStack(spacing: 2) {
@@ -244,31 +256,31 @@ public struct SnippetEditorView: View {
                     // 6. Fill-In Dropdown Menu
                     Menu {
                         Button {
-                            activeFillInSheet = .singleLine
+                            activeEditorSheet = .fillIn(.singleLine)
                         } label: {
                             Label("Single Line Field", systemImage: "minus")
                         }
                         
                         Button {
-                            activeFillInSheet = .multiLine
+                            activeEditorSheet = .fillIn(.multiLine)
                         } label: {
                             Label("Multi Line Field", systemImage: "text.alignleft")
                         }
                         
                         Button {
-                            activeFillInSheet = .datePicker
+                            activeEditorSheet = .fillIn(.datePicker)
                         } label: {
                             Label("Date Picker", systemImage: "calendar")
                         }
                         
                         Button {
-                            activeFillInSheet = .optionalSection
+                            activeEditorSheet = .fillIn(.optionalSection)
                         } label: {
                             Label("Optional Section", systemImage: "arrow.triangle.2.circlepath")
                         }
                         
                         Button {
-                            activeFillInSheet = .popupMenu
+                            activeEditorSheet = .fillIn(.popupMenu)
                         } label: {
                             Label("Popup Menu", systemImage: "arrow.up.right.square")
                         }
@@ -564,24 +576,58 @@ public struct SnippetEditorView: View {
                     .background(Color.secondary.opacity(0.02))
                 }
             }
-            .sheet(item: $activeFillInSheet) { sheetType in
-                FillInBuilderSheet(type: sheetType) { macro in
-                    insertMacro(macro, into: snippet)
-                }
-            }
-            .sheet(isPresented: $showingDateBuilderSheet) {
-                DateFormatBuilderSheet { macro in
-                    insertMacro(macro, into: snippet)
+            .sheet(item: $activeEditorSheet) { sheet in
+                switch sheet {
+                case .fillIn(let sheetType):
+                    FillInBuilderSheet(type: sheetType) { macro in
+                        insertMacro(macro, into: snippet)
+                    }
+                case .dateBuilder:
+                    DateFormatBuilderSheet { macro in
+                        insertMacro(macro, into: snippet)
+                    }
                 }
             }
         } else {
-            VStack(spacing: 12) {
-                Image(systemName: "text.alignleft")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.secondary.opacity(0.4))
-                Text("Select a Snippet to View or Edit")
+            VStack(spacing: 14) {
+                Image(systemName: store.snippets.isEmpty ? "sparkles.rectangle.stack" : "text.alignleft")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.secondary.opacity(0.35))
+                
+                Text(store.snippets.isEmpty ? "No Snippets in Library" : "Select a Snippet to View or Edit")
                     .font(.headline)
                     .foregroundStyle(.secondary)
+                
+                if store.snippets.isEmpty {
+                    Text("Your library is currently empty. Get started by creating your first snippet or importing an existing library.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                    
+                    HStack(spacing: 12) {
+                        Button("Create Snippet") {
+                            let group = store.ensureDefaultGroupExists()
+                            let newSnippet = Snippet(
+                                title: "My First Snippet",
+                                abbreviation: ";hello",
+                                content: "Hello, World! Created with Expandi.",
+                                groupId: group.id
+                            )
+                            store.addSnippet(newSnippet)
+                            appState.selectedSnippetId = newSnippet.id
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        
+                        Button("Load Sample Snippets") {
+                            store.loadStarterSnippets()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                    .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

@@ -74,13 +74,24 @@ public final class SnippetStore: ObservableObject {
         if let groups = loadedGroups, let snippets = loadedSnippets {
             self.groups = groups
             self.snippets = snippets
+            if (!groups.isEmpty || !snippets.isEmpty) && !self.settings.hasCompletedOnboarding {
+                self.settings.hasCompletedOnboarding = true
+                saveSettings()
+            }
             syncKeyboardMonitorCache()
         } else {
-            // First run: load default library
-            let defaults = DefaultSnippets.generateDefaultData()
-            self.groups = defaults.groups
-            self.snippets = defaults.snippets
-            saveAll()
+            // First run: check if onboarding was already flagged
+            if settings.hasCompletedOnboarding {
+                let defaults = DefaultSnippets.generateDefaultData()
+                self.groups = defaults.groups
+                self.snippets = defaults.snippets
+                saveAll()
+            } else {
+                // Keep empty until the user makes their choice in the Onboarding Welcome view
+                self.groups = []
+                self.snippets = []
+                syncKeyboardMonitorCache()
+            }
         }
     }
     
@@ -244,13 +255,66 @@ public final class SnippetStore: ObservableObject {
         saveSnippets()
     }
     
+    // MARK: - Onboarding & Starter Packs
+    
+    public func loadStarterSnippets() {
+        let defaults = DefaultSnippets.generateDefaultData()
+        self.groups = defaults.groups
+        self.snippets = defaults.snippets
+        self.settings.hasCompletedOnboarding = true
+        saveAll()
+    }
+    
+    public func startEmptyLibrary() {
+        self.groups = [SnippetGroup.emptyDefaultGroup]
+        self.snippets = []
+        self.settings.hasCompletedOnboarding = true
+        saveAll()
+    }
+    
+    @discardableResult
+    public func ensureDefaultGroupExists() -> SnippetGroup {
+        if let existing = groups.first(where: { $0.isEnabled }) ?? groups.first {
+            return existing
+        }
+        let fallback = SnippetGroup.emptyDefaultGroup
+        groups.append(fallback)
+        saveGroups()
+        return fallback
+    }
+    
+    // MARK: - Factory Reset & Deletion
+    
+    public func deleteAllSnippets() {
+        self.snippets.removeAll()
+        self.stats = ExpansionStats()
+        saveSnippets()
+        saveStats()
+    }
+    
     public func resetToDefaults() {
         let defaults = DefaultSnippets.generateDefaultData()
         self.groups = defaults.groups
         self.snippets = defaults.snippets
-        self.settings = AppSettings()
+        self.settings = AppSettings(hasCompletedOnboarding: true, colorScheme: settings.colorScheme)
         self.stats = ExpansionStats()
         saveAll()
+    }
+    
+    public func wipeEverything(reOnboard: Bool) {
+        if reOnboard {
+            self.snippets = []
+            self.groups = []
+            self.stats = ExpansionStats()
+            self.settings = AppSettings(hasCompletedOnboarding: false, colorScheme: settings.colorScheme)
+            saveAll()
+        } else {
+            self.snippets = []
+            self.groups = [SnippetGroup.emptyDefaultGroup]
+            self.stats = ExpansionStats()
+            self.settings = AppSettings(hasCompletedOnboarding: true, colorScheme: settings.colorScheme)
+            saveAll()
+        }
     }
     
     // MARK: - Helper Queries

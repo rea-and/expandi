@@ -41,4 +41,8 @@ public struct SnippetGroup: Identifiable, Codable, Hashable, Sendable {
         SnippetGroup(name: "Customer Support", iconName: "bubble.left.and.bubble.right.fill", colorHex: "#FF375F", prefix: ";", orderIndex: 4),
         SnippetGroup(name: "Symbols & Emojis", iconName: "face.smiling.fill", colorHex: "#FFD60A", prefix: ";", orderIndex: 5)
     ]
+    
+    public static var emptyDefaultGroup: SnippetGroup {
+        SnippetGroup(name: "General", iconName: "folder.fill", colorHex: "#0A84FF", prefix: ";", orderIndex: 0)
+    }
 }

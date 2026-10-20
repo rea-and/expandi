@@ -16,9 +16,11 @@ public final class TestRunner {
         testExportImportJSON()
         testExportImportCSV()
         testImportExternalLegacyCSV()
+        testFactoryResetAndDeleteAll()
+        testOnboardingEmptyAndStarter()
         
         print("==========================================")
-        print(" ALL 10 TEST SUITES PASSED (100%)        ")
+        print(" ALL 12 TEST SUITES PASSED (100%)        ")
         print("==========================================")
     }
     
@@ -288,5 +290,50 @@ public final class TestRunner {
         }
         
         print("  -> Passed! (Successfully imported \(result.snippetsImported) snippets from Basics.csv with full macro conversion)")
+    }
+    
+    private static func testFactoryResetAndDeleteAll() {
+        print("[TEST 11/12] Factory Reset & Delete All Snippets...")
+        Task { @MainActor in
+            let store = SnippetStore.shared
+            
+            // 1. Reset to defaults first
+            store.resetToDefaults()
+            assert(!store.snippets.isEmpty, "Store should have default snippets")
+            assert(!store.groups.isEmpty, "Store should have default groups")
+            
+            // 2. Test Delete All Snippets
+            store.deleteAllSnippets()
+            assert(store.snippets.isEmpty, "All snippets should be deleted")
+            assert(!store.groups.isEmpty, "Groups should remain when only deleting snippets")
+            
+            // 3. Test Wipe Everything & Re-Onboard
+            store.wipeEverything(reOnboard: true)
+            assert(store.snippets.isEmpty, "Snippets should be empty after wipe")
+            assert(store.groups.isEmpty, "Groups should be empty after re-onboard wipe")
+            assert(store.settings.hasCompletedOnboarding == false, "Onboarding should be reset")
+        }
+        print("  -> Passed!")
+    }
+    
+    private static func testOnboardingEmptyAndStarter() {
+        print("[TEST 12/12] First-Run Onboarding (Empty Library vs Starter Pack)...")
+        Task { @MainActor in
+            let store = SnippetStore.shared
+            
+            // 1. Start Empty
+            store.startEmptyLibrary()
+            assert(store.snippets.isEmpty, "Empty library should contain 0 snippets")
+            assert(store.groups.count == 1, "Empty library should contain 1 default group")
+            assert(store.groups.first?.name == "General", "Default group should be General")
+            assert(store.settings.hasCompletedOnboarding == true, "Onboarding should be completed")
+            
+            // 2. Load Starter Pack
+            store.loadStarterSnippets()
+            assert(store.snippets.count > 10, "Starter pack should contain snippets")
+            assert(store.groups.count > 3, "Starter pack should contain standard groups")
+            assert(store.settings.hasCompletedOnboarding == true, "Onboarding should remain completed")
+        }
+        print("  -> Passed!")
     }
 }

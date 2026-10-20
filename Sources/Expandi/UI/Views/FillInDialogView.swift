@@ -231,7 +231,12 @@ public struct FillInDialogView: View {
             .background(.bar)
         }
         .frame(width: 500)
-        .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
+        .background(
+            ZStack {
+                VisualEffectView(material: .popover, blendingMode: .behindWindow)
+                Color(NSColor.windowBackgroundColor).opacity(0.85)
+            }
+        )
     }
     
     @ViewBuilder

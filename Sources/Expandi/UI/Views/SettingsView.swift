@@ -8,6 +8,9 @@ public struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .general
     @State private var isAccessibilityGranted: Bool = KeyboardMonitor.shared.isAccessibilityGranted
     @State private var newExcludedApp: String = ""
+    @State private var showingDeleteAllAlert = false
+    @State private var showingResetDefaultsAlert = false
+    @State private var showingFactoryResetAlert = false
     
     enum SettingsTab: String, CaseIterable, Identifiable {
         case general = "General"
@@ -377,20 +380,121 @@ public struct SettingsView: View {
     
     @ViewBuilder
     private var advancedSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Reset & Backup Options")
-                .font(.system(size: 13, weight: .semibold))
-            
-            Button(role: .destructive) {
-                store.resetToDefaults()
-            } label: {
-                Text("Reset All to Default Starter Snippets")
-            }
-            .buttonStyle(.bordered)
-            
-            Text("Replaces all current snippets and groups with the original pre-loaded starter pack.")
-                .font(.caption)
+        VStack(alignment: .leading, spacing: 18) {
+            // Library Status Card
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Library Summary")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                HStack(spacing: 16) {
+                    Label("\(store.snippets.filter { !$0.isDeleted }.count) active snippets", systemImage: "text.alignleft")
+                        .font(.caption)
+                    Label("\(store.groups.count) groups", systemImage: "folder")
+                        .font(.caption)
+                    Label("\(store.snippets.filter { $0.isDeleted }.count) in trash", systemImage: "trash")
+                        .font(.caption)
+                }
                 .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            
+            Divider()
+            
+            // Delete All Snippets
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Delete Snippets")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                Button(role: .destructive) {
+                    showingDeleteAllAlert = true
+                } label: {
+                    Text("Delete All Saved Snippets...")
+                }
+                .buttonStyle(.bordered)
+                
+                Text("Permanently deletes all active and trashed snippets while preserving your group structure and settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Divider()
+            
+            // Reset to Starter Library
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Starter Snippets")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                Button {
+                    showingResetDefaultsAlert = true
+                } label: {
+                    Text("Restore Default Starter Snippets...")
+                }
+                .buttonStyle(.bordered)
+                
+                Text("Replaces all current snippets and groups with the pre-loaded sample library (Dates, Emojis, Templates, Math).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Divider()
+            
+            // Danger Zone: Factory Reset
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Danger Zone: Factory Reset")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.red)
+                
+                HStack(spacing: 12) {
+                    Button(role: .destructive) {
+                        showingFactoryResetAlert = true
+                    } label: {
+                        Text("Factory Reset Expandi...")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
+                    Button("Re-run Welcome Setup...") {
+                        store.settings.hasCompletedOnboarding = false
+                        store.saveSettings()
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                
+                Text("Factory reset completely clears all snippets, groups, statistics, and resets preferences back to clean initial state.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .alert("Delete All Snippets?", isPresented: $showingDeleteAllAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete All Snippets", role: .destructive) {
+                store.deleteAllSnippets()
+            }
+        } message: {
+            Text("Are you sure you want to permanently delete all \(store.snippets.count) snippets? This action cannot be undone.")
+        }
+        .alert("Restore Starter Snippets?", isPresented: $showingResetDefaultsAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Restore Starter Pack") {
+                store.resetToDefaults()
+            }
+        } message: {
+            Text("This will replace your current library with the default sample snippets and starter groups.")
+        }
+        .alert("Factory Reset Expandi?", isPresented: $showingFactoryResetAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Factory Reset (Wipe All)", role: .destructive) {
+                store.wipeEverything(reOnboard: true)
+                dismiss()
+            }
+            Button("Reset to Default Library") {
+                store.resetToDefaults()
+            }
+        } message: {
+            Text("This will completely reset Expandi. You can choose to wipe everything and see the Welcome setup, or restore the starter library.")
         }
     }
 }

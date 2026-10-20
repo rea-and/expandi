@@ -3,8 +3,20 @@ import SwiftUI
 public struct SidebarView: View {
     @ObservedObject var store = SnippetStore.shared
     @ObservedObject var appState = AppState.shared
-    @State private var showingAddGroupSheet = false
-    @State private var editingGroup: SnippetGroup? = nil
+    
+    enum ActiveGroupSheet: Identifiable {
+        case add
+        case edit(SnippetGroup)
+        
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .edit(let g): return "edit_\(g.id)"
+            }
+        }
+    }
+    
+    @State private var activeGroupSheet: ActiveGroupSheet? = nil
     
     public init() {}
     
@@ -115,7 +127,7 @@ public struct SidebarView: View {
                             appState.activeSheet = .newSnippet(groupId: group.id)
                         }
                         Button("Edit Group...") {
-                            editingGroup = group
+                            activeGroupSheet = .edit(group)
                         }
                         Divider()
                         Button(role: .destructive) {
@@ -125,12 +137,18 @@ public struct SidebarView: View {
                         }
                     }
                 }
+                if store.groups.isEmpty {
+                    Text("No Groups")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                }
             } header: {
                 HStack {
                     Text("Groups")
                     Spacer()
                     Button {
-                        showingAddGroupSheet = true
+                        activeGroupSheet = .add
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 11, weight: .bold))
@@ -214,14 +232,16 @@ public struct SidebarView: View {
                 .background(.bar)
             }
         }
-        .sheet(isPresented: $showingAddGroupSheet) {
-            GroupEditSheet(group: nil) { newGroup in
-                store.addGroup(newGroup)
-            }
-        }
-        .sheet(item: $editingGroup) { group in
-            GroupEditSheet(group: group) { updated in
-                store.updateGroup(updated)
+        .sheet(item: $activeGroupSheet) { sheet in
+            switch sheet {
+            case .add:
+                GroupEditSheet(group: nil) { newGroup in
+                    store.addGroup(newGroup)
+                }
+            case .edit(let group):
+                GroupEditSheet(group: group) { updated in
+                    store.updateGroup(updated)
+                }
             }
         }
     }

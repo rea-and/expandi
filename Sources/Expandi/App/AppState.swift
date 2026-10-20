@@ -40,6 +40,7 @@ public final class AppState: ObservableObject {
         case stats
         case importExport
         case permissions
+        case onboarding
         
         public var id: String {
             switch self {
@@ -50,6 +51,7 @@ public final class AppState: ObservableObject {
             case .stats: return "stats"
             case .importExport: return "importExport"
             case .permissions: return "permissions"
+            case .onboarding: return "onboarding"
             }
         }
     }

@@ -71,8 +71,32 @@ public struct MainWindowView: View {
                 .help("Open Quick Search HUD (\(store.settings.quickSearchHotkey))")
             }
         }
+        .onAppear {
+            if !store.settings.hasCompletedOnboarding {
+                appState.activeSheet = .onboarding
+            }
+        }
+        .onChange(of: store.settings.hasCompletedOnboarding) { _, completed in
+            if !completed {
+                appState.activeSheet = .onboarding
+            } else if case .onboarding = appState.activeSheet {
+                appState.activeSheet = nil
+            }
+        }
         .sheet(item: $appState.activeSheet) { sheet in
             switch sheet {
+            case .onboarding:
+                OnboardingWelcomeView(
+                    onChooseStarterPack: {
+                        store.loadStarterSnippets()
+                        appState.activeSheet = nil
+                    },
+                    onChooseEmpty: {
+                        store.startEmptyLibrary()
+                        appState.activeSheet = nil
+                    }
+                )
+                .interactiveDismissDisabled(true)
             case .stats:
                 StatsView()
             case .settings:

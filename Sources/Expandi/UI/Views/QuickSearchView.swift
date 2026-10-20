@@ -211,6 +211,16 @@ public struct QuickSearchView: View {
             .background(.bar)
         }
         .frame(width: 620, height: 380)
-        .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
+        .background(
+            ZStack {
+                VisualEffectView(material: .popover, blendingMode: .behindWindow)
+                Color(NSColor.windowBackgroundColor).opacity(0.85)
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
     }
 }

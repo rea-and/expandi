@@ -2,6 +2,13 @@ import Cocoa
 import SwiftUI
 import ApplicationServices
 
+// MARK: - Key-Focusable Panel for HUD and Dialogs
+
+public final class FocusablePanel: NSPanel {
+    public override var canBecomeKey: Bool { true }
+    public override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitorDelegate {
     public static private(set) var shared: AppDelegate?
@@ -153,6 +160,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         permsItem.target = self
         menu.addItem(permsItem)
         
+        let resetItem = NSMenuItem(title: "Factory Reset...", action: #selector(promptFactoryReset), keyEquivalent: "")
+        resetItem.target = self
+        menu.addItem(resetItem)
+        
         menu.addItem(NSMenuItem.separator())
         
         let quitItem = NSMenuItem(title: "Quit Expandi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -191,6 +202,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     @objc private func openPermissions() {
         openMainWindow()
         AppState.shared.activeSheet = .permissions
+    }
+    
+    @objc public func promptFactoryReset() {
+        openMainWindow()
+        let alert = NSAlert()
+        alert.messageText = "Factory Reset Expandi?"
+        alert.informativeText = "Choose whether to reset your library to the default sample snippet pack, or wipe everything and start completely fresh."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Reset to Default Starter Pack")
+        alert.addButton(withTitle: "Wipe All & Start Fresh")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            SnippetStore.shared.resetToDefaults()
+        } else if response == .alertSecondButtonReturn {
+            SnippetStore.shared.wipeEverything(reOnboard: true)
+        }
     }
     
     @objc private func handleRecentSnippetClick(_ sender: NSMenuItem) {
@@ -259,7 +288,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         
         targetAppBeforeHUD = NSWorkspace.shared.frontmostApplication
         
-        let panel = NSPanel(
+        let panel = FocusablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 380),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -331,7 +360,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     private func showFillInModal(snippet: Snippet, match: SnippetMatch) {
         let previousApp = NSWorkspace.shared.frontmostApplication
         
-        let panel = NSPanel(
+        let panel = FocusablePanel(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
             styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,

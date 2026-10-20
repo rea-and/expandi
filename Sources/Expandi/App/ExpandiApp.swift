@@ -34,11 +34,12 @@ public struct ExpandiApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Snippet") {
+                    let fallback = store.ensureDefaultGroupExists()
                     let currentGroupId: UUID
-                    if case .group(let gid) = appState.selectedSidebarItem {
+                    if case .group(let gid) = appState.selectedSidebarItem, store.groups.contains(where: { $0.id == gid }) {
                         currentGroupId = gid
                     } else {
-                        currentGroupId = store.groups.first?.id ?? UUID()
+                        currentGroupId = fallback.id
                     }
                     let prefix = store.group(for: currentGroupId)?.prefix ?? ";"
                     let newSnippet = Snippet(
@@ -79,6 +80,12 @@ public struct ExpandiApp: App {
                     appState.activeSheet = .settings
                 }
                 .keyboardShortcut(",", modifiers: .command)
+                
+                Divider()
+                
+                Button("Factory Reset...") {
+                    appDelegate.promptFactoryReset()
+                }
             }
             
             CommandGroup(after: .importExport) {

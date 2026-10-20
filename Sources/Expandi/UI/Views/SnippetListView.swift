@@ -148,18 +148,30 @@ public struct SnippetListView: View {
             if filteredSnippets.isEmpty {
                 VStack(spacing: 12) {
                     Spacer()
-                    Image(systemName: isTrashView ? "trash" : "text.badge.plus")
+                    Image(systemName: isTrashView ? "trash" : (store.snippets.isEmpty ? "sparkles" : "text.badge.plus"))
                         .font(.system(size: 36))
                         .foregroundStyle(.secondary.opacity(0.5))
-                    Text(isTrashView ? "Trash is Empty" : (appState.searchText.isEmpty ? "No Snippets Found" : "No Matching Snippets"))
+                    
+                    Text(isTrashView ? "Trash is Empty" : (appState.searchText.isEmpty ? (store.snippets.isEmpty ? "Library is Empty" : "No Snippets in Group") : "No Matching Snippets"))
                         .font(.headline)
                         .foregroundStyle(.secondary)
+                    
                     if !isTrashView && appState.searchText.isEmpty {
-                        Button("Create Snippet") {
-                            createNewSnippet()
+                        HStack(spacing: 10) {
+                            Button("Create Snippet") {
+                                createNewSnippet()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            
+                            if store.snippets.isEmpty {
+                                Button("Load Sample Snippets") {
+                                    store.loadStarterSnippets()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
                     }
                     Spacer()
                 }
@@ -205,11 +217,12 @@ public struct SnippetListView: View {
     }
     
     private func createNewSnippet() {
+        let fallbackGroup = store.ensureDefaultGroupExists()
         let currentGroupId: UUID
-        if case .group(let gid) = appState.selectedSidebarItem {
+        if case .group(let gid) = appState.selectedSidebarItem, store.groups.contains(where: { $0.id == gid }) {
             currentGroupId = gid
         } else {
-            currentGroupId = store.groups.first?.id ?? UUID()
+            currentGroupId = fallbackGroup.id
         }
         
         let prefix = store.group(for: currentGroupId)?.prefix ?? ";"
