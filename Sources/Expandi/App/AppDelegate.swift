@@ -52,7 +52,19 @@ final class MainWindowDelegate: NSObject, NSWindowDelegate {
     
     func windowDidBecomeMain(_ notification: Notification) {
         originalDelegate?.windowDidBecomeMain?(notification)
+        if appDelegate?.isInitialStartupHidden == true {
+            (notification.object as? NSWindow)?.orderOut(nil)
+            return
+        }
         appDelegate?.updateDockVisibility()
+    }
+    
+    func windowDidBecomeKey(_ notification: Notification) {
+        originalDelegate?.windowDidBecomeKey?(notification)
+        if appDelegate?.isInitialStartupHidden == true {
+            (notification.object as? NSWindow)?.orderOut(nil)
+            return
+        }
     }
     
     func windowDidMiniaturize(_ notification: Notification) {
@@ -72,7 +84,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public private(set) var isTerminating = false
     private var isInitialLaunch = true
-    private var isAppFullyLaunched = false
+    public private(set) var isAppFullyLaunched = false
+    public private(set) var isInitialStartupHidden = false
     private var dockUpdateWorkItem: DispatchWorkItem?
     public weak var mainWindow: NSWindow?
     private var mainWindowDelegate: MainWindowDelegate?
@@ -89,7 +102,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         let settings = SnippetStore.shared.settings
-        if !settings.hasCompletedOnboarding || !settings.hideFromDockWhenClosed {
+        if settings.hideFromDockWhenClosed {
+            isInitialStartupHidden = true
+            NSApp.setActivationPolicy(.accessory)
+        } else {
             NSApp.setActivationPolicy(.regular)
         }
         applyAppearance()
@@ -168,7 +184,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         }
         // Enable user-initiated reopen events only after the initial startup sequence completes
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            self?.isAppFullyLaunched = true
+            guard let self = self else { return }
+            self.isAppFullyLaunched = true
+            if self.isInitialStartupHidden {
+                self.isInitialStartupHidden = false
+                self.mainWindow?.alphaValue = 1.0
+            }
         }
     }
     
@@ -229,11 +250,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         if isInitialLaunch {
             isInitialLaunch = false
             let settings = SnippetStore.shared.settings
-            if settings.hideFromDockWhenClosed && settings.hasCompletedOnboarding {
+            if settings.hideFromDockWhenClosed {
+                isInitialStartupHidden = true
+                window.alphaValue = 0
                 window.orderOut(nil)
+                
                 DispatchQueue.main.async {
                     window.orderOut(nil)
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    window.orderOut(nil)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    window.orderOut(nil)
+                }
+                
                 if NSApp.activationPolicy() != .accessory {
                     NSApp.setActivationPolicy(.accessory)
                 }
@@ -250,6 +281,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         let updateBlock = { [weak self] in
             guard let self = self else { return }
             let settings = SnippetStore.shared.settings
+            
+            // Never switch to regular if we are in initial startup hidden mode
+            if self.isInitialStartupHidden {
+                if NSApp.activationPolicy() != .accessory {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+                return
+            }
+            
             guard settings.hideFromDockWhenClosed else {
                 if NSApp.activationPolicy() != .regular {
                     NSApp.setActivationPolicy(.regular)
@@ -405,6 +445,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     @objc public func openMainWindow() {
         dockUpdateWorkItem?.cancel()
+        isInitialStartupHidden = false
         
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
@@ -413,6 +454,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         let target = mainWindow ?? NSApp.windows.first(where: { isMainWindow($0) })
         if let window = target {
             self.mainWindow = window
+            window.alphaValue = 1.0
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
