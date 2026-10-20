@@ -22,6 +22,8 @@ public final class KeyboardMonitor: @unchecked Sendable {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var globalNSEventMonitor: Any?
+    private var localNSEventMonitor: Any?
+    private var permissionTimer: Timer?
     
     private var buffer = ""
     private let bufferLock = NSLock()
@@ -59,6 +61,11 @@ public final class KeyboardMonitor: @unchecked Sendable {
         let options = [promptKey: promptIfNeeded] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         self.isAccessibilityGranted = trusted
+        if trusted && eventTap == nil && isMonitoring {
+            DispatchQueue.main.async { [weak self] in
+                self?.startEventTap()
+            }
+        }
         return trusted
     }
     
@@ -74,18 +81,32 @@ public final class KeyboardMonitor: @unchecked Sendable {
     // MARK: - Lifecycle
     
     public func start() {
-        guard !isMonitoring else { return }
+        logExpandi("KeyboardMonitor: start() invoked")
+        isMonitoring = true
         checkAccessibilityPermissions()
         
-        startEventTap()
+        let started = startEventTap()
         startNSEventFallback()
-        isMonitoring = true
+        startLocalEventMonitor()
+        
+        if !started {
+            startPermissionPollTimer()
+        }
+    }
+    
+    public func restart() {
+        logExpandi("KeyboardMonitor: restart() invoked")
+        stop()
+        start()
     }
     
     public func stop() {
-        guard isMonitoring else { return }
+        logExpandi("KeyboardMonitor: stop() invoked")
         stopEventTap()
         stopNSEventFallback()
+        stopLocalEventMonitor()
+        permissionTimer?.invalidate()
+        permissionTimer = nil
         isMonitoring = false
     }
     
@@ -101,18 +122,48 @@ public final class KeyboardMonitor: @unchecked Sendable {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.clearBuffer()
+            guard let self = self else { return }
+            self.clearBuffer()
+            // If the event tap was not active, check if accessibility was granted in the background
+            if self.eventTap == nil && self.isMonitoring {
+                if self.checkAccessibilityPermissions() {
+                    self.startEventTap()
+                }
+            }
+        }
+    }
+    
+    private func startPermissionPollTimer() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.permissionTimer?.invalidate()
+            
+            self.permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
+                guard let self = self else { timer.invalidate(); return }
+                if self.checkAccessibilityPermissions() {
+                    let created = self.startEventTap()
+                    if created {
+                        logExpandi("KeyboardMonitor: Event tap auto-recovered after permission grant!")
+                        timer.invalidate()
+                        self.permissionTimer = nil
+                    }
+                }
+            }
         }
     }
     
     // MARK: - CGEventTap
     
-    private func startEventTap() {
+    @discardableResult
+    private func startEventTap() -> Bool {
+        if eventTap != nil { return true }
+        
         let eventMask = (1 << CGEventType.keyDown.rawValue)
         let observer = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
+        // 1. Try HID Level first (hardware level before application filtering)
+        var tap = CGEvent.tapCreate(
+            tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: CGEventMask(eventMask),
@@ -122,15 +173,36 @@ public final class KeyboardMonitor: @unchecked Sendable {
                 return monitor.handleEventTap(proxy: proxy, type: type, event: event)
             },
             userInfo: observer
-        ) else {
-            return
+        )
+        
+        // 2. Fallback to Session Level if HID level tap is not available
+        if tap == nil {
+            tap = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .defaultTap,
+                eventsOfInterest: CGEventMask(eventMask),
+                callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
+                    guard let refcon = refcon else { return Unmanaged.passRetained(event) }
+                    let monitor = Unmanaged<KeyboardMonitor>.fromOpaque(refcon).takeUnretainedValue()
+                    return monitor.handleEventTap(proxy: proxy, type: type, event: event)
+                },
+                userInfo: observer
+            )
         }
         
-        self.eventTap = tap
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        guard let validTap = tap else {
+            logExpandi("KeyboardMonitor: CGEvent.tapCreate failed (Accessibility permission required)")
+            return false
+        }
+        
+        self.eventTap = validTap
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, validTap, 0)
         self.runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        CGEvent.tapEnable(tap: validTap, enable: true)
+        logExpandi("KeyboardMonitor: Event tap successfully created and enabled!")
+        return true
     }
     
     private func stopEventTap() {
@@ -141,11 +213,13 @@ public final class KeyboardMonitor: @unchecked Sendable {
                 self.runLoopSource = nil
             }
             self.eventTap = nil
+            logExpandi("KeyboardMonitor: Event tap stopped")
         }
     }
     
     private func handleEventTap(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            logExpandi("KeyboardMonitor: Tap disabled by system, re-enabling...")
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
@@ -208,6 +282,7 @@ public final class KeyboardMonitor: @unchecked Sendable {
         
         // Check for matching snippets
         if let match = checkForMatch(in: currentBuffer, lastTyped: typedString) {
+            logExpandi("KeyboardMonitor: MATCHED snippet '\(match.snippet.title)' (abbr: '\(match.snippet.abbreviation)')")
             clearBuffer()
             delegate?.keyboardMonitorDidMatchSnippet(match)
         }
@@ -215,7 +290,7 @@ public final class KeyboardMonitor: @unchecked Sendable {
         return Unmanaged.passRetained(event)
     }
     
-    // MARK: - NSEvent Fallback Monitor
+    // MARK: - NSEvent Fallback & Local Monitors
     
     private func startNSEventFallback() {
         globalNSEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
@@ -230,6 +305,24 @@ public final class KeyboardMonitor: @unchecked Sendable {
         if let monitor = globalNSEventMonitor {
             NSEvent.removeMonitor(monitor)
             globalNSEventMonitor = nil
+        }
+    }
+    
+    private func startLocalEventMonitor() {
+        localNSEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self = self else { return event }
+            // If the global event tap didn't intercept within our own windows, process it here
+            if self.eventTap == nil {
+                self.processNSEvent(event)
+            }
+            return event
+        }
+    }
+    
+    private func stopLocalEventMonitor() {
+        if let monitor = localNSEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localNSEventMonitor = nil
         }
     }
     
@@ -260,6 +353,7 @@ public final class KeyboardMonitor: @unchecked Sendable {
         bufferLock.unlock()
         
         if let match = checkForMatch(in: currentBuffer, lastTyped: chars) {
+            logExpandi("KeyboardMonitor (NSEvent fallback): MATCHED '\(match.snippet.title)'")
             clearBuffer()
             delegate?.keyboardMonitorDidMatchSnippet(match)
         }
@@ -289,14 +383,19 @@ public final class KeyboardMonitor: @unchecked Sendable {
         
         for snippet in snippets {
             guard !snippet.isDeleted else { continue }
-            guard let group = groupsMap[snippet.groupId], group.isEnabled else { continue }
+            // If group exists, ensure it is enabled; if group doesn't exist, allow fallback
+            if let group = groupsMap[snippet.groupId], !group.isEnabled {
+                continue
+            }
+            let groupPrefix = groupsMap[snippet.groupId]?.prefix ?? ""
             
             if let frontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+               let group = groupsMap[snippet.groupId],
                group.excludedApps.contains(frontmostApp) {
                 continue
             }
             
-            let fullAbbr = snippet.effectiveAbbreviation(withGroupPrefix: group.prefix)
+            let fullAbbr = snippet.effectiveAbbreviation(withGroupPrefix: groupPrefix)
             guard !fullAbbr.isEmpty else { continue }
             
             switch snippet.delimiterMode {

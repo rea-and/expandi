@@ -42,10 +42,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         // Setup Status Bar Menu Item
         setupStatusBarItem()
         
+        // Setup App Activation Observer to auto-recover tap when user returns from System Settings
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            if KeyboardMonitor.shared.checkAccessibilityPermissions() {
+                KeyboardMonitor.shared.start()
+            }
+        }
+        
         // Check Accessibility Permissions
         if !KeyboardMonitor.shared.isAccessibilityGranted {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                AppState.shared.activeSheet = .permissions
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                // If onboarding is not active, present permissions sheet
+                if SnippetStore.shared.settings.hasCompletedOnboarding {
+                    AppState.shared.activeSheet = .permissions
+                }
             }
         }
     }

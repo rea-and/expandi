@@ -47,8 +47,8 @@ cp -R "$SOURCE_BUNDLE" "$DEST_PATH"
 # Remove quarantine attribute if present
 xattr -dr com.apple.quarantine "$DEST_PATH" 2>/dev/null || true
 
-# Re-sign installed bundle
-codesign --force --deep --sign - "$DEST_PATH"
+# Re-sign installed bundle with stable designated requirement
+codesign --force --deep --sign - -r="designated => identifier \"app.expandi.Expandi\"" "$DEST_PATH"
 
 echo ""
 echo "=========================================="

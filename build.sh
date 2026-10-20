@@ -49,9 +49,9 @@ fi
 # PkgInfo
 echo -n "APPL????" > "$CONTENTS_DIR/PkgInfo"
 
-# 3. Ad-hoc code signing
+# 3. Ad-hoc code signing with stable designated requirement
 echo "[3/4] Code signing application bundle..."
-codesign --force --deep --sign - "$APP_BUNDLE"
+codesign --force --deep --sign - -r="designated => identifier \"app.expandi.Expandi\"" "$APP_BUNDLE"
 
 # 4. Verify bundle
 echo "[4/4] Verifying application bundle..."

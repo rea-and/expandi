@@ -27,7 +27,7 @@ public struct PermissionsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 StepRow(number: "1", text: "Click the button below to open macOS System Settings.")
                 StepRow(number: "2", text: "Find 'Expandi' in the Accessibility list.")
-                StepRow(number: "3", text: "Turn on the toggle switch next to Expandi.")
+                StepRow(number: "3", text: "Turn on the toggle switch next to Expandi. (If already listed, toggle it OFF and back ON to refresh).")
             }
             .padding(16)
             .background(Color.secondary.opacity(0.06))
@@ -40,9 +40,12 @@ public struct PermissionsView: View {
                 .buttonStyle(.borderedProminent)
                 
                 Button("Check Status") {
-                    isGranted = KeyboardMonitor.shared.checkAccessibilityPermissions()
+                    isGranted = KeyboardMonitor.shared.checkAccessibilityPermissions(promptIfNeeded: true)
                     if isGranted {
-                        dismiss()
+                        KeyboardMonitor.shared.restart()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            dismiss()
+                        }
                     }
                 }
                 
