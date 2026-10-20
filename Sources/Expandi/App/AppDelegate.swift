@@ -9,9 +9,70 @@ public final class FocusablePanel: NSPanel {
     public override var canBecomeMain: Bool { true }
 }
 
+// MARK: - Main Window Delegate Proxy
+
+final class MainWindowDelegate: NSObject, NSWindowDelegate {
+    nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
+    nonisolated(unsafe) weak var appDelegate: AppDelegate?
+    
+    override func responds(to aSelector: Selector!) -> Bool {
+        if super.responds(to: aSelector) {
+            return true
+        }
+        return originalDelegate?.responds(to: aSelector) ?? false
+    }
+    
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let orig = originalDelegate, orig.responds(to: aSelector) {
+            return orig
+        }
+        return super.forwardingTarget(for: aSelector)
+    }
+    
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if appDelegate?.isTerminating == true {
+            return originalDelegate?.windowShouldClose?(sender) ?? true
+        }
+        sender.orderOut(nil)
+        appDelegate?.updateDockVisibility()
+        return false
+    }
+    
+    func windowWillClose(_ notification: Notification) {
+        originalDelegate?.windowWillClose?(notification)
+        appDelegate?.updateDockVisibility()
+    }
+    
+    func windowDidResignMain(_ notification: Notification) {
+        originalDelegate?.windowDidResignMain?(notification)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.appDelegate?.updateDockVisibility()
+        }
+    }
+    
+    func windowDidBecomeMain(_ notification: Notification) {
+        originalDelegate?.windowDidBecomeMain?(notification)
+        appDelegate?.updateDockVisibility()
+    }
+    
+    func windowDidMiniaturize(_ notification: Notification) {
+        originalDelegate?.windowDidMiniaturize?(notification)
+        appDelegate?.updateDockVisibility()
+    }
+    
+    func windowDidDeminiaturize(_ notification: Notification) {
+        originalDelegate?.windowDidDeminiaturize?(notification)
+        appDelegate?.updateDockVisibility()
+    }
+}
+
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitorDelegate {
     public static private(set) var shared: AppDelegate?
+    
+    public private(set) var isTerminating = false
+    public weak var mainWindow: NSWindow?
+    private var mainWindowDelegate: MainWindowDelegate?
     
     private var statusItem: NSStatusItem?
     private var quickSearchPanel: NSPanel?
@@ -45,16 +106,34 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         // Sync Launch at Login with macOS ServiceManagement
         LaunchAtLoginManager.shared.syncWithSettings()
         
-        // Window close observer to hide from Dock when closed
+        // Observers for window close, resign main, and resign active to update Dock visibility
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let self = self else { return }
-            guard let window = notification.object as? NSWindow, !(window is NSPanel) else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                self.updateDockVisibility()
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateDockVisibility()
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignMainNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateDockVisibility()
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateDockVisibility()
             }
         }
         
@@ -63,9 +142,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
-        ) { _ in
-            if KeyboardMonitor.shared.checkAccessibilityPermissions() {
-                KeyboardMonitor.shared.start()
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                if KeyboardMonitor.shared.checkAccessibilityPermissions() {
+                    KeyboardMonitor.shared.start()
+                }
+                self?.updateDockVisibility()
             }
         }
         
@@ -81,9 +163,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     }
     
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            openMainWindow()
-        }
+        openMainWindow()
         return true
     }
     
@@ -91,7 +171,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         return false
     }
     
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        isTerminating = true
+        return .terminateNow
+    }
+    
+    public func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
+    }
+    
     // MARK: - Dock & Window Visibility
+    
+    public func isMainWindow(_ window: NSWindow) -> Bool {
+        guard !(window is NSPanel) else { return false }
+        guard !window.className.contains("StatusBar") else { return false }
+        guard window.level == .normal else { return false }
+        guard window.styleMask.contains(.titled) else { return false }
+        guard window.canBecomeMain else { return false }
+        return true
+    }
+    
+    public var hasVisibleMainWindow: Bool {
+        if let win = mainWindow {
+            return (win.isVisible || win.isMiniaturized)
+        }
+        return NSApp.windows.contains { window in
+            isMainWindow(window) && (window.isVisible || window.isMiniaturized)
+        }
+    }
+    
+    public func configureMainWindow(_ window: NSWindow) {
+        guard self.mainWindow !== window else { return }
+        self.mainWindow = window
+        window.isReleasedWhenClosed = false
+        
+        let delegate = MainWindowDelegate()
+        delegate.originalDelegate = window.delegate
+        delegate.appDelegate = self
+        self.mainWindowDelegate = delegate
+        window.delegate = delegate
+        
+        updateDockVisibility()
+    }
     
     public func updateDockVisibility() {
         let settings = SnippetStore.shared.settings
@@ -102,17 +223,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
             return
         }
         
-        // Check if any non-panel main windows are currently visible
-        let hasVisibleWindow = NSApp.windows.contains { window in
-            !(window is NSPanel) && window.isVisible
-        }
-        
-        if hasVisibleWindow {
+        if hasVisibleMainWindow {
             if NSApp.activationPolicy() != .regular {
                 NSApp.setActivationPolicy(.regular)
             }
         } else {
-            // All windows closed -> hide from Dock while remaining active in menu bar
+            // All windows closed / ordered out -> hide from Dock while remaining active in menu bar
             if NSApp.activationPolicy() != .accessory {
                 NSApp.setActivationPolicy(.accessory)
             }
@@ -228,10 +344,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         
         menu.addItem(NSMenuItem.separator())
         
-        let quitItem = NSMenuItem(title: "Quit Expandi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Expandi", action: #selector(handleQuit), keyEquivalent: "q")
+        quitItem.target = self
         menu.addItem(quitItem)
         
         statusItem.menu = menu
+    }
+    
+    @objc public func handleQuit() {
+        isTerminating = true
+        NSApp.terminate(nil)
     }
     
     @objc private func toggleExpansion() {
@@ -248,10 +370,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
         }
-        NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
+        
+        let target = mainWindow ?? NSApp.windows.first(where: { isMainWindow($0) })
+        if let window = target {
+            self.mainWindow = window
             window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
         }
+        
+        NSApp.activate(ignoringOtherApps: true)
+        updateDockVisibility()
     }
     
     @objc private func openPreferences() {

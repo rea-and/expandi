@@ -71,9 +71,20 @@ public struct MainWindowView: View {
                 .help("Open Quick Search HUD (\(store.settings.quickSearchHotkey))")
             }
         }
+        .background(
+            WindowAccessor { window in
+                AppDelegate.shared?.configureMainWindow(window)
+            }
+        )
         .onAppear {
             if !store.settings.hasCompletedOnboarding {
                 appState.activeSheet = .onboarding
+            }
+            AppDelegate.shared?.updateDockVisibility()
+        }
+        .onDisappear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                AppDelegate.shared?.updateDockVisibility()
             }
         }
         .onChange(of: store.settings.hasCompletedOnboarding) { _, completed in
@@ -107,6 +118,30 @@ public struct MainWindowView: View {
                 PermissionsView()
             default:
                 EmptyView()
+            }
+        }
+    }
+}
+
+// MARK: - Window Accessor Helper
+
+private struct WindowAccessor: NSViewRepresentable {
+    let callback: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let nsView = NSView()
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                self.callback(window)
+            }
+        }
+        return nsView
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                self.callback(window)
             }
         }
     }
