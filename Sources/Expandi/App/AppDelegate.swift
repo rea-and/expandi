@@ -72,6 +72,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public private(set) var isTerminating = false
     private var isInitialLaunch = true
+    private var dockUpdateWorkItem: DispatchWorkItem?
     public weak var mainWindow: NSWindow?
     private var mainWindowDelegate: MainWindowDelegate?
     
@@ -87,9 +88,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         let settings = SnippetStore.shared.settings
-        if settings.hideFromDockWhenClosed && settings.hasCompletedOnboarding {
-            NSApp.setActivationPolicy(.accessory)
-        } else {
+        if !settings.hasCompletedOnboarding || !settings.hideFromDockWhenClosed {
             NSApp.setActivationPolicy(.regular)
         }
         applyAppearance()
@@ -235,24 +234,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         updateDockVisibility()
     }
     
-    public func updateDockVisibility() {
-        let settings = SnippetStore.shared.settings
-        guard settings.hideFromDockWhenClosed else {
-            if NSApp.activationPolicy() != .regular {
-                NSApp.setActivationPolicy(.regular)
+    public func updateDockVisibility(immediate: Bool = false) {
+        dockUpdateWorkItem?.cancel()
+        
+        let updateBlock = { [weak self] in
+            guard let self = self else { return }
+            let settings = SnippetStore.shared.settings
+            guard settings.hideFromDockWhenClosed else {
+                if NSApp.activationPolicy() != .regular {
+                    NSApp.setActivationPolicy(.regular)
+                }
+                return
             }
-            return
+            
+            let targetPolicy: NSApplication.ActivationPolicy = self.hasVisibleMainWindow ? .regular : .accessory
+            if NSApp.activationPolicy() != targetPolicy {
+                NSApp.setActivationPolicy(targetPolicy)
+            }
         }
         
-        if hasVisibleMainWindow {
-            if NSApp.activationPolicy() != .regular {
-                NSApp.setActivationPolicy(.regular)
-            }
+        if immediate {
+            updateBlock()
         } else {
-            // All windows closed / ordered out -> hide from Dock while remaining active in menu bar
-            if NSApp.activationPolicy() != .accessory {
-                NSApp.setActivationPolicy(.accessory)
-            }
+            let workItem = DispatchWorkItem(block: updateBlock)
+            dockUpdateWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
         }
     }
     
@@ -388,6 +394,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     }
     
     @objc public func openMainWindow() {
+        dockUpdateWorkItem?.cancel()
+        
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
         }
@@ -400,7 +408,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         }
         
         NSApp.activate(ignoringOtherApps: true)
-        updateDockVisibility()
     }
     
     @objc private func openPreferences() {

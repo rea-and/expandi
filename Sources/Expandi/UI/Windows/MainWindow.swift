@@ -80,12 +80,6 @@ public struct MainWindowView: View {
             if !store.settings.hasCompletedOnboarding {
                 appState.activeSheet = .onboarding
             }
-            AppDelegate.shared?.updateDockVisibility()
-        }
-        .onDisappear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                AppDelegate.shared?.updateDockVisibility()
-            }
         }
         .onChange(of: store.settings.hasCompletedOnboarding) { _, completed in
             if !completed {
