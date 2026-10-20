@@ -30,6 +30,8 @@ public struct AppSettings: Codable, Sendable {
     public var quickSearchHotkey: String
     public var showMenuBarIcon: Bool
     public var showDockIcon: Bool
+    public var launchAtLogin: Bool
+    public var hideFromDockWhenClosed: Bool
     public var excludedAppBundleIds: [String]
     public var defaultDelimiterMode: String
     public var defaultCaseSensitivity: String
@@ -45,6 +47,8 @@ public struct AppSettings: Codable, Sendable {
         quickSearchHotkey: String = "Option+Space",
         showMenuBarIcon: Bool = true,
         showDockIcon: Bool = true,
+        launchAtLogin: Bool = true,
+        hideFromDockWhenClosed: Bool = true,
         excludedAppBundleIds: [String] = ["com.apple.SecurityAgent"],
         defaultDelimiterMode: String = "immediate",
         defaultCaseSensitivity: String = "adaptCase",
@@ -59,6 +63,8 @@ public struct AppSettings: Codable, Sendable {
         self.quickSearchHotkey = quickSearchHotkey
         self.showMenuBarIcon = showMenuBarIcon
         self.showDockIcon = showDockIcon
+        self.launchAtLogin = launchAtLogin
+        self.hideFromDockWhenClosed = hideFromDockWhenClosed
         self.excludedAppBundleIds = excludedAppBundleIds
         self.defaultDelimiterMode = defaultDelimiterMode
         self.defaultCaseSensitivity = defaultCaseSensitivity
@@ -76,6 +82,8 @@ public struct AppSettings: Codable, Sendable {
         self.quickSearchHotkey = try container.decodeIfPresent(String.self, forKey: .quickSearchHotkey) ?? "Option+Space"
         self.showMenuBarIcon = try container.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? true
         self.showDockIcon = try container.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? true
+        self.launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? true
+        self.hideFromDockWhenClosed = try container.decodeIfPresent(Bool.self, forKey: .hideFromDockWhenClosed) ?? true
         self.excludedAppBundleIds = try container.decodeIfPresent([String].self, forKey: .excludedAppBundleIds) ?? ["com.apple.SecurityAgent"]
         self.defaultDelimiterMode = try container.decodeIfPresent(String.self, forKey: .defaultDelimiterMode) ?? "immediate"
         self.defaultCaseSensitivity = try container.decodeIfPresent(String.self, forKey: .defaultCaseSensitivity) ?? "adaptCase"

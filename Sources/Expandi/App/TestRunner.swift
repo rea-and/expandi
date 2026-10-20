@@ -332,6 +332,8 @@ public final class TestRunner {
             store.loadStarterSnippets()
             assert(store.snippets.count > 10, "Starter pack should contain snippets")
             assert(store.groups.count > 3, "Starter pack should contain standard groups")
+            assert(store.settings.launchAtLogin == true, "launchAtLogin should be enabled by default")
+            assert(store.settings.hideFromDockWhenClosed == true, "hideFromDockWhenClosed should be enabled by default")
             assert(store.settings.hasCompletedOnboarding == true, "Onboarding should remain completed")
         }
         print("  -> Passed!")

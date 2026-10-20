@@ -42,6 +42,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
         // Setup Status Bar Menu Item
         setupStatusBarItem()
         
+        // Sync Launch at Login with macOS ServiceManagement
+        LaunchAtLoginManager.shared.syncWithSettings()
+        
+        // Window close observer to hide from Dock when closed
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            guard let window = notification.object as? NSWindow, !(window is NSPanel) else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.updateDockVisibility()
+            }
+        }
+        
         // Setup App Activation Observer to auto-recover tap when user returns from System Settings
         NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
@@ -69,6 +85,38 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
             openMainWindow()
         }
         return true
+    }
+    
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+    
+    // MARK: - Dock & Window Visibility
+    
+    public func updateDockVisibility() {
+        let settings = SnippetStore.shared.settings
+        guard settings.hideFromDockWhenClosed else {
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+            return
+        }
+        
+        // Check if any non-panel main windows are currently visible
+        let hasVisibleWindow = NSApp.windows.contains { window in
+            !(window is NSPanel) && window.isVisible
+        }
+        
+        if hasVisibleWindow {
+            if NSApp.activationPolicy() != .regular {
+                NSApp.setActivationPolicy(.regular)
+            }
+        } else {
+            // All windows closed -> hide from Dock while remaining active in menu bar
+            if NSApp.activationPolicy() != .accessory {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
     }
     
     // MARK: - Appearance (Light / Dark)
@@ -197,8 +245,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, KeyboardMonitor
     }
     
     @objc public func openMainWindow() {
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeMain }) {
+        if let window = NSApp.windows.first(where: { !($0 is NSPanel) }) {
             window.makeKeyAndOrderFront(nil)
         }
     }

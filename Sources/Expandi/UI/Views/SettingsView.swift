@@ -237,13 +237,46 @@ public struct SettingsView: View {
             
             Divider()
             
-            Toggle("Show Icon in Menu Bar", isOn: Binding(
-                get: { store.settings.showMenuBarIcon },
-                set: {
-                    store.settings.showMenuBarIcon = $0
-                    store.saveSettings()
-                }
-            ))
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 10) {
+                Text("System & Startup")
+                    .font(.system(size: 13, weight: .semibold))
+                
+                Toggle("Launch Expandi automatically on login", isOn: Binding(
+                    get: { store.settings.launchAtLogin },
+                    set: { newValue in
+                        store.settings.launchAtLogin = newValue
+                        store.saveSettings()
+                        LaunchAtLoginManager.shared.setEnabled(newValue)
+                    }
+                ))
+                Text("Expandi starts automatically when you log into your Mac so abbreviations work immediately.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 20)
+                
+                Toggle("Hide app from Dock when window is closed", isOn: Binding(
+                    get: { store.settings.hideFromDockWhenClosed },
+                    set: { newValue in
+                        store.settings.hideFromDockWhenClosed = newValue
+                        store.saveSettings()
+                        AppDelegate.shared?.updateDockVisibility()
+                    }
+                ))
+                Text("When closed, Expandi hides from the Dock and stays active in your menu bar. Reopen anytime from the menu bar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 20)
+                
+                Toggle("Show Icon in Menu Bar", isOn: Binding(
+                    get: { store.settings.showMenuBarIcon },
+                    set: {
+                        store.settings.showMenuBarIcon = $0
+                        store.saveSettings()
+                    }
+                ))
+            }
         }
     }
     
